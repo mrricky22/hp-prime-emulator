@@ -1,4 +1,5 @@
-name: Build Linux PPL checker
+
+name: Build Linux PPL Checker
 
 on:
   workflow_dispatch:
@@ -6,18 +7,51 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+
     steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
-      - name: Install Linux build dependencies
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install Linux dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y build-essential clang libclang-dev cmake libudev-dev pkg-config
-      - name: Build the PPL CLI
-        run: cargo build --locked --release --bin ppl
-      - name: Upload downloadable Linux executable
+          sudo apt-get install -y \
+            build-essential \
+            clang \
+            libclang-dev \
+            cmake \
+            libudev-dev \
+            pkg-config
+
+      - name: Build PPL CLI
+        run: |
+          cargo build --locked --release -p ppl-cli --bin ppl
+
+      - name: Find executable
+        run: |
+          echo "Searching for compiled executable..."
+          find target -type f -name "ppl" -ls
+          ls -lah target/release/
+
+      - name: Prepare executable
+        run: |
+          mkdir -p dist
+          BINARY=$(find target -type f -name ppl -perm /111 | head -n 1)
+          if [ -z "$BINARY" ]; then
+            echo "ERROR: PPL executable not found"
+            exit 1
+          fi
+          cp "$BINARY" dist/ppl
+          chmod +x dist/ppl
+          file dist/ppl
+          ./dist/ppl --help
+
+      - name: Upload Linux executable
         uses: actions/upload-artifact@v4
         with:
           name: ppl-linux-x86_64
-          path: target/release/ppl
+          path: dist/ppl
           if-no-files-found: error
