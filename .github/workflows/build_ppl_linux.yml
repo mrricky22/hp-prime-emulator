@@ -8,6 +8,9 @@ jobs:
   build:
     runs-on: ubuntu-latest
 
+    env:
+      CARGO_TARGET_DIR: ${{ github.workspace }}/target
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -30,23 +33,44 @@ jobs:
         run: |
           cargo build --locked --release -p ppl-cli --bin ppl
 
-      - name: Find executable
+      - name: Locate compiled executable
+        shell: bash
         run: |
-          echo "Searching for compiled executable..."
-          find target -type f -name "ppl" -ls
-          ls -lah target/release/
+          echo "Cargo target directory: $CARGO_TARGET_DIR"
+          echo "Looking for PPL executable..."
+
+          find "$CARGO_TARGET_DIR" -type f -name "ppl" -print
+
+          echo "Release directory:"
+          ls -lah "$CARGO_TARGET_DIR/release/"
 
       - name: Prepare executable
+        shell: bash
         run: |
+          set -euo pipefail
+
           mkdir -p dist
-          BINARY=$(find target -type f -name ppl -perm /111 | head -n 1)
-          if [ -z "$BINARY" ]; then
-            echo "ERROR: PPL executable not found"
+
+          BINARY="$CARGO_TARGET_DIR/release/ppl"
+
+          if [ ! -f "$BINARY" ]; then
+            BINARY=$(find "$CARGO_TARGET_DIR" \
+              -type f -name "ppl" -perm /111 \
+              -print -quit)
+          fi
+
+          if [ -z "$BINARY" ] || [ ! -f "$BINARY" ]; then
+            echo "ERROR: Compiled PPL executable not found!"
             exit 1
           fi
+
           cp "$BINARY" dist/ppl
           chmod +x dist/ppl
+
+          echo "Executable information:"
           file dist/ppl
+
+          echo "Testing CLI:"
           ./dist/ppl --help
 
       - name: Upload Linux executable
@@ -55,3 +79,4 @@ jobs:
           name: ppl-linux-x86_64
           path: dist/ppl
           if-no-files-found: error
+          retention-days: 7
